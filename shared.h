@@ -26,7 +26,7 @@ typedef struct
     int from_account;
     int to_account;
     int amount;
-    int success; // 0: fail, 1: success
+    int success;
 } Transaction;
 
 typedef struct
@@ -35,4 +35,4 @@ typedef struct
     Transaction transactions[MAX_TRANSACTIONS];
 } BankData;
 
-#endif // SHARED_H
+#endif

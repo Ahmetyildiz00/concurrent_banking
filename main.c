@@ -81,7 +81,7 @@ int main()
     // Print transaction log
     printf("\nTransaction Log:\n");
 
-    // Normal işlemler
+    // Normal Transactions
     for (int i = 0; i < MAX_TRANSACTIONS && data->transactions[i].transaction_id != -1; i++)
     {
         printf("Transaction %d: ", data->transactions[i].transaction_id);
