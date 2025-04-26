@@ -1,6 +1,8 @@
 #ifndef SHARED_H
 #define SHARED_H
 
+#include <sys/types.h>
+
 #define MAX_ACCOUNTS 10
 #define MAX_TRANSACTIONS 100
 
@@ -33,4 +35,4 @@ typedef struct
     Transaction transactions[MAX_TRANSACTIONS];
 } BankData;
 
-#endif
+#endif // SHARED_H

@@ -2,12 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include "shared.h"
-#include <sys/types.h> // For pid_t, etc.
-#include <sys/ipc.h>   // For IPC_PRIVATE, shmget, etc.
-#include <sys/shm.h>   // For shmget, shmat
-#include <unistd.h>    // For fork, getpid, etc.
+#include "semaphore.h"
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
+#include <unistd.h>
+#include <sys/wait.h>
 
-// Function to load transactions from a file
 void load_transactions(BankData *data, const char *filename)
 {
     FILE *file = fopen(filename, "r");
@@ -40,6 +41,11 @@ void load_transactions(BankData *data, const char *filename)
         }
     }
 
+    for (int i = count; i < MAX_TRANSACTIONS; i++)
+    {
+        data->transactions[i].transaction_id = -1;
+    }
+
     fclose(file);
     printf("%d transactions loaded.\n", count);
 }
@@ -47,57 +53,38 @@ void load_transactions(BankData *data, const char *filename)
 int process_deposit(BankData *data, int account_id, int amount)
 {
     if (amount <= 0)
-    {
-        printf("Invalid deposit amount.\n");
         return 0;
-    }
     data->accounts[account_id].balance += amount;
-    printf("Deposit successful: Account %d, Amount: %d\n", account_id, amount);
     return 1;
 }
 
 int process_withdraw(BankData *data, int account_id, int amount)
 {
-    if (amount <= 0)
-    {
-        printf("Invalid withdraw amount.\n");
+    if (amount <= 0 || data->accounts[account_id].balance < amount)
         return 0;
-    }
-    if (data->accounts[account_id].balance < amount)
-    {
-        printf("Insufficient balance in Account %d.\n", account_id);
-        return 0;
-    }
     data->accounts[account_id].balance -= amount;
-    printf("Withdrawal successful: Account %d, Amount: %d\n", account_id, amount);
     return 1;
 }
 
 int process_transfer(BankData *data, int from_account, int to_account, int amount)
 {
-    if (amount <= 0)
-    {
-        printf("Invalid transfer amount.\n");
+    if (amount <= 0 || data->accounts[from_account].balance < amount)
         return 0;
-    }
-    if (data->accounts[from_account].balance < amount)
-    {
-        printf("Insufficient balance in Account %d for transfer.\n", from_account);
-        return 0;
-    }
     data->accounts[from_account].balance -= amount;
     data->accounts[to_account].balance += amount;
-    printf("Transfer successful: From Account %d to Account %d, Amount: %d\n", from_account, to_account, amount);
     return 1;
 }
 
-void process_transaction(BankData *data, Transaction *transaction)
+void process_transaction(BankData *data, Transaction *transaction, int semid)
 {
     pid_t pid = fork();
 
     if (pid == 0)
-    { // Child process
+    {
         int result = 0;
+
+        lock_semaphore(semid);
+
         switch (transaction->type)
         {
         case DEPOSIT:
@@ -110,19 +97,22 @@ void process_transaction(BankData *data, Transaction *transaction)
             result = process_transfer(data, transaction->from_account, transaction->to_account, transaction->amount);
             break;
         }
-        exit(result); // Exit with success or failure code
+
+        unlock_semaphore(semid);
+
+        if (result)
+            exit(0);
+        else
+            exit(-1);
     }
     else if (pid > 0)
-    { // Parent process
+    {
         int status;
-        wait(&status); // Wait for child process to finish
+        waitpid(pid, &status, 0);
         if (WIFEXITED(status))
         {
-            printf("Transaction processed successfully with result code: %d\n", WEXITSTATUS(status));
-        }
-        else
-        {
-            printf("Transaction failed.\n");
+            int exit_code = WEXITSTATUS(status);
+            transaction->success = (exit_code == 0) ? 1 : 0;
         }
     }
     else
